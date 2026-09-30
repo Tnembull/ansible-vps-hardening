@@ -1,0 +1,73 @@
+---
+- name: Hardening & Base Configuration for Ubuntu VPS
+  hosts: vps_servers
+  become: true
+  gather_facts: true
+
+  tasks:
+    - name: 1. Update apt cache and upgrade system packages
+      ansible.builtin.apt:
+        update_cache: true
+        cache_valid_time: 3600
+        upgrade: dist
+      tags: [system, packages]
+
+    - name: 2. Install essential production packages
+      ansible.builtin.apt:
+        name:
+          - curl
+          - wget
+          - git
+          - ufw
+          - fail2ban
+          - htop
+          - unzip
+          - jq
+        state: present
+      tags: [system, packages]
+
+    - name: 3. Configure SSH Hardening (Disable root login & password auth)
+      ansible.builtin.lineinfile:
+        path: /etc/ssh/sshd_config
+        regexp: "{{ item.regexp }}"
+        line: "{{ item.line }}"
+        state: present
+        validate: "/usr/sbin/sshd -t -f %s"
+      loop:
+        - { regexp: '^#?PermitRootLogin', line: 'PermitRootLogin no' }
+        - { regexp: '^#?PasswordAuthentication', line: 'PasswordAuthentication no' }
+        - { regexp: '^#?PubkeyAuthentication', line: 'PubkeyAuthentication yes' }
+        - { regexp: '^#?MaxAuthTries', line: 'MaxAuthTries 3' }
+      notify: Restart SSH Service
+      tags: [security, ssh]
+
+    - name: 4. Configure UFW Firewall rules
+      community.general.ufw:
+        rule: allow
+        port: "{{ item.port }}"
+        proto: tcp
+      loop:
+        - { port: '22' }
+        - { port: '80' }
+        - { port: '443' }
+      tags: [security, ufw]
+
+    - name: 5. Enable UFW with default incoming deny
+      community.general.ufw:
+        state: enabled
+        default: deny
+        direction: incoming
+      tags: [security, ufw]
+
+    - name: 6. Ensure Fail2ban is enabled and running
+      ansible.builtin.systemd:
+        name: fail2ban
+        enabled: true
+        state: started
+      tags: [security, fail2ban]
+
+  handlers:
+    - name: Restart SSH Service
+      ansible.builtin.systemd:
+        name: ssh
+        state: restarted
