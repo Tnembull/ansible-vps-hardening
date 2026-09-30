@@ -1,0 +1,35 @@
+name: "Ansible Playbook Lint & Syntax Check"
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  ansible-ci:
+    name: "Ansible Quality Gate"
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: "Checkout Code"
+        uses: actions/checkout@v4
+
+      - name: "Set up Python Environment"
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: "Install Ansible & Linters"
+        run: |
+          python -m pip install --upgrade pip
+          pip install ansible-core ansible-lint
+
+      - name: "Ansible Playbook Syntax Check"
+        run: |
+          ansible-playbook -i inventory.ini playbook.yml --syntax-check
+
+      - name: "Ansible Linting"
+        run: |
+          ansible-lint playbook.yml || true
